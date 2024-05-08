@@ -158,6 +158,37 @@ protected:
                 this.loadBackground(null);
             }
         }
+
+        uiImLabelColored(_("When tracking lost"), vec4(0.8, 0.3, 0.3, 1));
+        uiImSeperator();
+            igInputFloat("Inactive timeout", &insScene.zoneInactiveDuration);
+
+			const(char)* actionLabel;
+			final switch (insScene.inactiveAction) {
+				case InactiveAction.Nothing:
+					actionLabel = "Go back to default";
+					break;
+				case InactiveAction.StayAtPose:
+					actionLabel = "Stay at pose";
+					break;
+				case InactiveAction.SleepAnim:
+					actionLabel = "Play tracking_lost anim";
+					break;
+			}
+
+			if (uiImBeginComboBox("INACTIVE_ACTION_COMBO", actionLabel)) {
+				if (uiImSelectable("Go back to default", insScene.inactiveAction == InactiveAction.Nothing)) {
+					insScene.inactiveAction = InactiveAction.Nothing;
+				}
+				if (uiImSelectable("Stay at pose", insScene.inactiveAction == InactiveAction.StayAtPose)) {
+					insScene.inactiveAction = InactiveAction.StayAtPose;
+				}
+				if (uiImSelectable("Play tracking_lost anim", insScene.inactiveAction == InactiveAction.SleepAnim)) {
+					insScene.inactiveAction = InactiveAction.SleepAnim;
+				}
+				uiImEndComboBox();
+			}
+        uiImIndent();
     }
 
 public:

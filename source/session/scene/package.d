@@ -20,6 +20,12 @@ import bindbc.opengl;
 import inochi2d.core.animation.player;
 import std.math.operations : isClose;
 
+enum InactiveAction {
+	Nothing,
+	SleepAnim,
+	StayAtPose,
+}
+
 struct Scene {
     VirtualSpace space;
     SceneItem[] sceneItems;
@@ -28,7 +34,9 @@ struct Scene {
     Texture backgroundImage;
 
     bool shouldPostProcess = true;
+	float zoneInactiveDuration = 5;
     float zoneInactiveTimer = 0;
+	InactiveAction inactiveAction = InactiveAction.SleepAnim;
 }
 
 struct SceneItem {
@@ -266,18 +274,20 @@ void insUpdateScene() {
         
         if (!insScene.space.isCurrentZoneActive()) {
             insScene.zoneInactiveTimer += deltaTime();
-            if (insScene.zoneInactiveTimer >= 5) {
-                foreach(ref sceneItem; insScene.sceneItems) {
-                    if (sceneItem.sleepAnim && !sceneItem.sleepAnim.playing()) {
-                        sceneItem.sleepAnim.strength = 1;
-                        sceneItem.sleepAnim.play(true);
-                    }
-                }
+            if (insScene.zoneInactiveTimer >= insScene.zoneInactiveDuration) {
+				if (insScene.inactiveAction == InactiveAction.SleepAnim) {
+					foreach(ref sceneItem; insScene.sceneItems) {
+						if (sceneItem.sleepAnim && !sceneItem.sleepAnim.playing()) {
+							sceneItem.sleepAnim.strength = 1;
+							sceneItem.sleepAnim.play(true);
+						}
+					}
+				}
             }
         } else {
             insScene.zoneInactiveTimer -= deltaTime();
         }
-        insScene.zoneInactiveTimer = clamp(insScene.zoneInactiveTimer, 0, 6);
+        insScene.zoneInactiveTimer = clamp(insScene.zoneInactiveTimer, 0, insScene.zoneInactiveDuration + 1);
         
         import std.stdio : writeln;
 
@@ -299,7 +309,7 @@ void insUpdateScene() {
                     }
 
                     // Stop sleep animation
-                    if (!sceneItem.sleepAnim.stopping && sceneItem.sleepAnim.playing && insScene.space.isCurrentZoneActive()) {
+                    if (!sceneItem.sleepAnim.stopping && sceneItem.sleepAnim.playing && (insScene.space.isCurrentZoneActive() || insScene.inactiveAction != InactiveAction.SleepAnim)) {
                         sceneItem.sleepAnim.stop();
                     }
                 }
