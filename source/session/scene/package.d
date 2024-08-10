@@ -368,8 +368,7 @@ void insUpdateScene() {
             }
 
             sceneItem.player.update(deltaTime());
-
-			sceneItem.puppet.update();
+            sceneItem.puppet.update();
             sceneItem.puppet.draw();
             
             foreach(ref binding; sceneItem.bindings) {
