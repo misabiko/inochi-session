@@ -315,7 +315,10 @@ void insUpdateScene() {
                 }
             }
 
-            sceneItem.puppet.update();
+			// Probably better to freeze at the binding instead (to keep breathing and stuff)
+			if (insScene.inactiveAction != InactiveAction.StayAtPose || insScene.space.isCurrentZoneActive()) {
+            	sceneItem.puppet.update();
+			}
             sceneItem.puppet.draw();
             
             foreach(ref binding; sceneItem.bindings) {
