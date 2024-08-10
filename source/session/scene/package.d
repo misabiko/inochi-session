@@ -10,6 +10,7 @@ import inmath;
 import inui.input;
 import inui;
 import session.tracking;
+import session.animation;
 import session.tracking.vspace;
 import session.panels.tracking : insTrackingPanelRefresh;
 import session.log;
@@ -36,6 +37,8 @@ struct Scene {
     bool shouldPostProcess = true;
 	float zoneInactiveDuration = 5;
     float zoneInactiveTimer = 0;
+
+    bool sleeping = false;
 	InactiveAction inactiveAction = InactiveAction.SleepAnim;
 }
 
@@ -43,11 +46,16 @@ struct SceneItem {
     string filePath;
     Puppet puppet;
     TrackingBinding[] bindings;
+    AnimationControl[] animations;
     AnimationPlayer player;
-    AnimationPlaybackRef sleepAnim;
 
     void saveBindings() {
         puppet.extData["com.inochi2d.inochi-session.bindings"] = cast(ubyte[])serializeToJson(bindings);
+        inWriteINPExtensions(puppet, filePath);
+    }
+
+    void saveAnimations() {
+        puppet.extData["com.inochi2d.inochi-session.animations"] = cast(ubyte[])serializeToJson(animations);
         inWriteINPExtensions(puppet, filePath);
     }
 
@@ -60,6 +68,22 @@ struct SceneItem {
             foreach(ref binding; preBindings) {
                 if (binding.finalize(puppet)) {
                     bindings ~= binding;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool tryLoadAnimations() {
+        if ("com.inochi2d.inochi-session.animations" in puppet.extData) {
+            auto preAnimation = deserialize!(AnimationControl[])(cast(string)puppet.extData["com.inochi2d.inochi-session.animations"]);
+
+            // finalize the loading
+            animations = [];
+            foreach(ref animation; preAnimation) {
+                if (animation.finalize(player)) {
+                    animations ~= animation;
                 }
             }
             return true;
@@ -120,6 +144,36 @@ struct SceneItem {
             }
         }
     }
+
+    void genAnimationControls() {
+        AnimationControl[string] acs; 
+        foreach(ref ac; animations) {
+            acs[ac.name] = ac;
+        }
+
+        foreach(name, ref anim; puppet.getAnimations()) {
+            if(name !in acs){
+                AnimationControl ac = new AnimationControl();
+                ac.name = name;
+                ac.finalize(player);
+
+                animations ~= ac;
+            }
+        }
+
+    }
+
+    void sleep(){
+        foreach(ref animation; animations) {
+            animation.sleep();
+        }
+    }
+
+    void awake(){
+        foreach(ref animation; animations) {
+            animation.awake();
+        }
+    }
 }
 
 /**
@@ -134,14 +188,20 @@ void insSceneAddPuppet(string path, Puppet puppet) {
     item.filePath = path;
     item.puppet = puppet;
     item.player = new AnimationPlayer(puppet);
-    item.sleepAnim = item.player.createOrGet("tracking_lost");
     
     if (!item.tryLoadBindings()) {
         // Reset bindings
         item.bindings.length = 0;
     }
-    item.genBindings();
+    if (!item.tryLoadAnimations()) {
+        // Reset animations
+        item.animations.length = 0;
+    }
 
+    item.genBindings();
+    item.genAnimationControls();
+
+    if(insScene.sleeping) item.sleep();
     insScene.sceneItems ~= item;
 }
 
@@ -276,20 +336,25 @@ void insUpdateScene() {
             insScene.zoneInactiveTimer += deltaTime();
             if (insScene.zoneInactiveTimer >= insScene.zoneInactiveDuration) {
 				if (insScene.inactiveAction == InactiveAction.SleepAnim) {
-					foreach(ref sceneItem; insScene.sceneItems) {
-						if (sceneItem.sleepAnim && !sceneItem.sleepAnim.playing()) {
-							sceneItem.sleepAnim.strength = 1;
-							sceneItem.sleepAnim.play(true);
+                	if (!insScene.sleeping) {
+						foreach(ref sceneItem; insScene.sceneItems) {
+							sceneItem.sleep();
 						}
+						insScene.sleeping = true;
 					}
 				}
             }
         } else {
             insScene.zoneInactiveTimer -= deltaTime();
+            // Stop sleep animation
+            if (insScene.sleeping) {
+                foreach(ref sceneItem; insScene.sceneItems) {
+                    sceneItem.awake();
+                }
+                insScene.sleeping = false;
+            }
         }
         insScene.zoneInactiveTimer = clamp(insScene.zoneInactiveTimer, 0, insScene.zoneInactiveDuration + 1);
-        
-        import std.stdio : writeln;
 
         // Update every scene item
         foreach(ref sceneItem; insScene.sceneItems) {
@@ -298,22 +363,11 @@ void insUpdateScene() {
                 binding.update();
             }
 
-            sceneItem.player.update(deltaTime());
-            if (sceneItem.sleepAnim) {
-                if (sceneItem.sleepAnim.isRunning) {
-                    float eframe = sceneItem.sleepAnim.hframe-sceneItem.sleepAnim.loopPointEnd;
-                    float elen = cast(float)sceneItem.sleepAnim.frames-sceneItem.sleepAnim.loopPointEnd;
-
-                    if (sceneItem.sleepAnim.stopping) {
-                        sceneItem.sleepAnim.strength = 1-(eframe/elen);
-                    }
-
-                    // Stop sleep animation
-                    if (!sceneItem.sleepAnim.stopping && sceneItem.sleepAnim.playing && (insScene.space.isCurrentZoneActive() || insScene.inactiveAction != InactiveAction.SleepAnim)) {
-                        sceneItem.sleepAnim.stop();
-                    }
-                }
+            foreach(ref ac; sceneItem.animations) {
+                ac.update();
             }
+
+            sceneItem.player.update(deltaTime());
 
 			// Probably better to freeze at the binding instead (to keep breathing and stuff)
 			if (insScene.inactiveAction != InactiveAction.StayAtPose || insScene.space.isCurrentZoneActive()) {
