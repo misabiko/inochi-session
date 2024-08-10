@@ -311,12 +311,14 @@ public:
                     }
                 }
 
-                // Smoothly transition back to default pose if tracking is lost.
                 if (!insScene.space.hasAnyFocus()) {
-                    param.value.vector[axis] = dampen(param.value.vector[axis], param.defaults.vector[axis], deltaTime(), 1);
-                    
-                    // Fix anoying -e values from dampening
-                    param.value.vector[axis] = quantize(param.value.vector[axis], 0.0001);
+					if (insScene.inactiveAction != InactiveAction.StayAtPose) {
+                        // Smoothly transition back to default pose if tracking is lost.
+                        param.value.vector[axis] = dampen(param.value.vector[axis], param.defaults.vector[axis], deltaTime(), 1);
+                        
+                        // Fix anoying -e values from dampening
+                        param.value.vector[axis] = quantize(param.value.vector[axis], 0.0001);
+					}
                     break;
                 }
 
